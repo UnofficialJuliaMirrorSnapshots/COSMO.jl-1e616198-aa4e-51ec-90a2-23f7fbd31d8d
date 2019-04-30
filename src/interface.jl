@@ -139,7 +139,7 @@ warm_start_slack!(model::COSMO.Model{T}, s0::Real, ind::Int64) where {T} = (mode
 Provides the `COSMO.Model` with warm starting values for the dual variable `y`. `ind` can be used to warm start certain components of `y`.
 """
 warm_start_dual!(model::COSMO.Model{T}, y0::Vector{T}, ind::Union{UnitRange{Int64}, Nothing}) where {T} = _warm_start!(model.vars.μ, -y0, ind)
-warm_start_dual!(model::COSMO.Model{T}, y0::Vector{T}) where {T} = warm_start_slack!(model, -y0, nothing)
+warm_start_dual!(model::COSMO.Model{T}, y0::Vector{T}) where {T} = warm_start_dual!(model, y0, nothing)
 warm_start_dual!(model::COSMO.Model{T}, y0::Real, ind::Int64) where {T} = (model.vars.μ[ind] = -y0)
 
 """
@@ -170,8 +170,7 @@ function set!(model::COSMO.Model,
 	model.p.A = A_c
 	model.p.b = b_c
 	model.p.model_size = [m; n]
-	model.p.C = CompositeConvexSet(convex_sets)
-	model.p.C = CompositeConvexSet(convex_sets)
+	model.p.C = CompositeConvexSet(deepcopy(convex_sets))
 	model.vars = Variables{T}(m, n, model.p.C)
  	model.settings = settings
 	nothing
