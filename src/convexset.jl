@@ -41,6 +41,11 @@ function rectify_scaling!(E,work,set::ZeroSet{T}) where{T}
 	return false
 end
 
+function allocate_memory!(cone::AbstractConvexSet{T}) where {T}
+  return nothing
+end
+
+
 # ----------------------------------------------------
 # Nonnegative orthant
 # ----------------------------------------------------
@@ -131,8 +136,6 @@ end
 # ----------------------------------------------------
 
 #a type to maintain internal workspace data for the BLAS syevr function
-
-
 mutable struct PsdBlasWorkspace{T}
     m::Base.RefValue{BLAS.BlasInt}
     w::Vector{T}
@@ -252,7 +255,23 @@ struct PsdCone{T} <: AbstractConvexCone{T}
 end
 PsdCone(dim) = PsdCone{DefaultFloat}(dim)
 
-function project!(x::AbstractVector{T}, cone::PsdCone{T}) where{T}
+
+struct DensePsdCone{T} <: AbstractConvexCone{T}
+  dim::Int
+  sqrt_dim::Int
+  work::PsdBlasWorkspace{T}
+  function DensePsdCone{T}(dim::Int) where{T}
+    dim >= 0       || throw(DomainError(dim, "dimension must be nonnegative"))
+    iroot = isqrt(dim)
+    iroot^2 == dim || throw(DomainError(dim, "dimension must be a square"))
+    new(dim, iroot, PsdBlasWorkspace{T}(iroot))
+  end
+end
+DensePsdCone(dim) = DensePsdCone{DefaultFloat}(dim)
+
+
+
+function project!(x::AbstractVector{T}, cone::Union{PsdCone{T}, DensePsdCone{T}}) where{T}
 	n = cone.sqrt_dim
 
     # handle 1D case
@@ -272,30 +291,31 @@ function project!(x::AbstractVector{T}, cone::PsdCone{T}) where{T}
     return nothing
 end
 
-function in_dual(x::AbstractVector{T}, cone::PsdCone{T}, tol::T) where{T}
+
+function in_dual(x::AbstractVector{T}, cone::Union{PsdCone{T}, DensePsdCone{T}}, tol::T) where{T}
 	n = cone.sqrt_dim
 	X = reshape(x, n, n)
   return is_pos_sem_def(X, tol)
 end
 
-function in_pol_recc(x::AbstractVector{T}, cone::PsdCone{T}, tol::T) where{T}
+function in_pol_recc(x::AbstractVector{T}, cone::Union{PsdCone{T}, DensePsdCone{T}}, tol::T) where{T}
 	n = cone.sqrt_dim
 	X = reshape(x, n, n)
 	return is_neg_sem_def(X, tol)
 end
 
-function scale!(cone::PsdCone{T}, ::AbstractVector{T}) where{T}
+
+function scale!(cone::Union{PsdCone{T}, DensePsdCone{T}}, ::AbstractVector{T}) where{T}
 	return nothing
 end
 
-function rectify_scaling!(E, work, set::PsdCone{T}) where{T}
+function rectify_scaling!(E, work, set::Union{PsdCone{T}, DensePsdCone{T}}) where{T}
 	return rectify_scalar_scaling!(E, work)
 end
 
 # ----------------------------------------------------
 # Positive Semidefinite Cone (Triangle)
 # ----------------------------------------------------
-
 # Psd cone given by upper-triangular entries of matrix
 """
     PsdConeTriangle(dim)
@@ -312,8 +332,7 @@ The matrix
 is transformed to the vector ``[x_1, x_2, x_3, x_4, x_5, x_6]^\\top `` with corresponding constraint  `PsdConeTriangle(6)`.
 
 """
-struct PsdConeTriangle{T} <: AbstractConvexCone{T}
-
+mutable struct PsdConeTriangle{T} <: AbstractConvexCone{T}
     dim::Int #dimension of vector
     sqrt_dim::Int # side length of matrix
     X::Array{T,2}
@@ -322,14 +341,29 @@ struct PsdConeTriangle{T} <: AbstractConvexCone{T}
     function PsdConeTriangle{T}(dim::Int) where{T}
         dim >= 0       || throw(DomainError(dim, "dimension must be nonnegative"))
         side_dimension = Int(sqrt(0.25 + 2 * dim) - 0.5);
+        new(dim, side_dimension, zeros(side_dimension, side_dimension), PsdBlasWorkspace{T}(side_dimension))
 
-        new(dim, side_dimension, zeros(side_dimension, side_dimension),PsdBlasWorkspace{T}(side_dimension))
     end
 end
 PsdConeTriangle(dim) = PsdConeTriangle{DefaultFloat}(dim)
 
+mutable struct DensePsdConeTriangle{T} <: AbstractConvexCone{T}
+    dim::Int #dimension of vector
+    sqrt_dim::Int # side length of matrix
+    X::Array{T,2}
+    work::PsdBlasWorkspace{T}
 
-function project!(x::AbstractArray, cone::PsdConeTriangle{T}) where{T}
+    function DensePsdConeTriangle{T}(dim::Int) where{T}
+        dim >= 0       || throw(DomainError(dim, "dimension must be nonnegative"))
+        side_dimension = Int(sqrt(0.25 + 2 * dim) - 0.5);
+        new(dim, side_dimension, zeros(side_dimension, side_dimension), PsdBlasWorkspace{T}(side_dimension))
+    end
+end
+DensePsdConeTriangle(dim) = DensePsdConeTriangle{DefaultFloat}(dim)
+
+
+
+function project!(x::AbstractArray, cone::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}) where{T}
     # handle 1D case
     if length(x) == 1
         x = max.(x,zero(T))
@@ -341,25 +375,30 @@ function project!(x::AbstractArray, cone::PsdConeTriangle{T}) where{T}
     return nothing
 end
 
-function in_dual(x::AbstractVector{T}, cone::PsdConeTriangle{T}, tol::T) where{T}
+
+function in_dual(x::AbstractVector{T}, cone::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}, tol::T) where{T}
     n = cone.sqrt_dim
     populate_upper_triangle!(cone.X, x, 1 / sqrt(2))
     return is_pos_sem_def(cone.X, tol)
 end
 
-function in_pol_recc(x::AbstractVector{T}, cone::PsdConeTriangle{T}, tol::T) where{T}
+function in_pol_recc(x::AbstractVector{T}, cone::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}, tol::T) where{T}
     n = cone.sqrt_dim
     populate_upper_triangle!(cone.X, x, 1 / sqrt(2))
     Xs = Symmetric(cone.X)
     return is_neg_sem_def(cone.X, tol)
 end
 
-function scale!(cone::PsdConeTriangle{T}, ::AbstractVector{T}) where{T}
+function scale!(cone::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}, ::AbstractVector{T}) where{T}
     return nothing
 end
 
-function rectify_scaling!(E, work, set::PsdConeTriangle{T}) where{T}
+function rectify_scaling!(E, work, set::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}) where{T}
     return rectify_scalar_scaling!(E,work)
+end
+
+function allocate_memory!(cone::Union{PsdConeTriangle{T}, DensePsdConeTriangle{T}}) where {T}
+  cone.X = zeros(cone.sqrt_dim, cone.sqrt_dim)
 end
 
 function populate_upper_triangle!(A::AbstractMatrix, x::AbstractVector, scaling_factor::Float64)

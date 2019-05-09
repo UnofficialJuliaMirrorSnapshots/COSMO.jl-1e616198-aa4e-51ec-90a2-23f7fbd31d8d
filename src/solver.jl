@@ -51,7 +51,10 @@ Attempts to solve the optimization problem defined in `COSMO.Model` object with 
 function optimize!(ws::COSMO.Workspace)
 	solver_time_start = time()
 	settings = ws.settings
-
+  # perform chordal decomposition
+  if settings.decompose
+  	ws.times.graph_time = @elapsed COSMO.chordal_decomposition!(ws)
+  end
 	# create scaling variables
 	# with scaling    -> uses mutable diagonal scaling matrices
 	# without scaling -> uses identity matrices
@@ -108,7 +111,6 @@ function optimize!(ws::COSMO.Workspace)
 		# compute them every {settings.check_termination} step
 		mod(iter, settings.check_termination)  == 0 && ((r_prim, r_dual) = calculate_residuals(ws))
 
-
 		# check convergence with residuals every {settings.checkIteration} steps
 		if mod(iter, settings.check_termination) == 0
 			# update cost
@@ -143,7 +145,6 @@ function optimize!(ws::COSMO.Workspace)
 			end
 		end
 
-
 		# adapt rhoVec if enabled
 		if settings.adaptive_rho && (mod(iter, settings.adaptive_rho_interval) == 0) && (settings.adaptive_rho_interval > 0)
 			adapt_rho_vec!(ws)
@@ -172,6 +173,11 @@ function optimize!(ws::COSMO.Workspace)
 		cost =  (1/2 * ws.vars.x' * ws.p.P * ws.vars.x + ws.p.q' * ws.vars.x)[1] #sm.cinv * not necessary anymore since reverseScaling
 	end
 
+	# reverse chordal decomposition
+	if settings.decompose
+	 reverse_decomposition!(ws, settings)
+	end
+
 	ws.times.solver_time = time() - solver_time_start
 	settings.verbose_timing && (ws.times.post_time = time() - ws.times.post_time)
 	# print solution to screen
@@ -179,8 +185,7 @@ function optimize!(ws::COSMO.Workspace)
 
 	# create result object
 	res_info = ResultInfo(r_prim, r_dual)
-	y = -ws.vars.μ
-	return result = Result{Float64}(ws.vars.x, y, ws.vars.s.data, cost, num_iter, status, res_info, ws.times);
 
+	return Result{Float64}(ws.vars.x, -ws.vars.μ, ws.vars.s.data, cost, num_iter, status, res_info, ws.times);
 end
 

@@ -166,6 +166,61 @@ end
 
 ProblemData(args...) = ProblemData{DefaultFloat}(args...)
 
+# ---------------------------
+# Struct to hold clique and sparsity data for a constraint
+# ---------------------------
+
+mutable struct SparsityPattern
+  sntree::SuperNodeTree
+  ordering::Array{Int64}
+  reverse_ordering::Array{Int64}
+
+  # constructor for sparsity pattern
+  function SparsityPattern(L, N::Int64, ordering)
+
+    reverse_ordering = zeros(length(ordering))
+    for i = 1:N
+      reverse_ordering[ordering[i]] = i
+    end
+    sntree = SuperNodeTree(L)
+    return new(sntree, ordering, reverse_ordering)
+  end
+end
+
+# To handle the case where a PSD cone is dense
+# -------------------------------------
+# Chordal Decomposition Information
+# -------------------------------------
+mutable struct ChordalInfo{T <: Real}
+  originalM::Int64
+  originalN::Int64
+  originalC::CompositeConvexSet{T}
+  H::SparseMatrixCSC{T}
+  sp_arr::Array{COSMO.SparsityPattern}
+  psd_cones_ind::Array{Int64} # stores the position of decomposable psd cones in the composite convex set
+  num_psd_cones::Int64 # number of psd cones of original problem
+  num_decomposable::Int64 #number of decomposable cones
+  num_decom_psd_cones::Int64 #total number of psd cones after decomposition
+  L::SparseMatrixCSC{T} #pre allocate memory for QDLD - Lt
+
+  function ChordalInfo{T}(problem::COSMO.ProblemData{T}) where {T}
+    originalM = problem.model_size[1]
+    originalN = problem.model_size[2]
+    originalC = deepcopy(problem.C)
+    num_psd_cones = length(findall(x -> typeof(x) <: Union{PsdConeTriangle{Float64}, PsdCone{Float64}} , problem.C.sets))
+    # allocate sparsity pattern for each cone
+    sp_arr = Array{COSMO.SparsityPattern}(undef, num_psd_cones)
+
+    return new(originalM, originalN, originalC, spzeros(1, 1), sp_arr, Int64[], num_psd_cones, 0, 0, spzeros(1, 1))
+  end
+
+	function ChordalInfo{T}() where{T}
+		C = COSMO.CompositeConvexSet([COSMO.ZeroSet{T}(1)])
+		return new(0, 0, C, spzeros(1, 1), COSMO.SparsityPattern[], [1])
+	end
+
+end
+
 # -------------------------------------
 # Structure of internal iterate variables
 # -------------------------------------
@@ -199,6 +254,7 @@ mutable struct Workspace{T}
 	p::ProblemData{T}
 	settings::Settings
 	sm::ScaleMatrices{T}
+	ci::ChordalInfo{T}
 	vars::Variables{T}
 	ρ::T
 	ρvec::Vector{T}
@@ -212,7 +268,8 @@ mutable struct Workspace{T}
 		p = ProblemData{T}()
 		sm = ScaleMatrices{T}()
 		vars = Variables{T}(1, 1, p.C)
-		return new(p, Settings(), sm, vars, zero(T), T[], ldlt(sparse(1.0I, 1, 1)), spzeros(0, 0), Flags(), Info([zero(T)]), ResultTimes())
+		ci = ChordalInfo{T}()
+		return new(p, Settings(), sm, ci, vars, zero(T), T[], ldlt(sparse(1.0I, 1, 1)), spzeros(0, 0), Flags(), Info([zero(T)]), ResultTimes())
 	end
 end
 Workspace(args...) = Workspace{DefaultFloat}(args...)
@@ -224,3 +281,5 @@ Workspace(args...) = Workspace{DefaultFloat}(args...)
 Initializes an empty COSMO model that can be filled with problem data using `assemble!(model, P, q,constraints; [settings, x0, s0, y0])`.
 """
 const Model = Workspace;
+
+
