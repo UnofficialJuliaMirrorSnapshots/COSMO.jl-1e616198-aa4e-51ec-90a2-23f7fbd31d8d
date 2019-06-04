@@ -14,7 +14,7 @@
   <a href="https://codecov.io/gh/oxfordcontrol/COSMO.jl"><img src="https://codecov.io/gh/oxfordcontrol/COSMO.jl/branch/master/graph/badge.svg"></a>
   <a href="https://oxfordcontrol.github.io/COSMO.jl/stable"><img src="https://img.shields.io/badge/Documentation-stable-purple.svg"></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  <a href="https://github.com/oxfordcontrol/COSMO.jl/releases"><img src="https://img.shields.io/badge/Release-v0.4.2-blue.svg"></a>
+  <a href="https://github.com/oxfordcontrol/COSMO.jl/releases"><img src="https://img.shields.io/badge/Release-v0.4.3-blue.svg"></a>
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@ __For more information check the [COSMO.jl Documentation](https://oxfordcontrol.
 
 ## Features
 
-* __Versatile__: COSMO solves linear programs, quadratic programs, second-order cone programs, semidefinite programs and exponential cone programs
+* __Versatile__: COSMO solves linear programs, quadratic programs, second-order cone programs, semidefinite programs and problems involving exponential and power cones
 * __Quad SDPs__: Positive semidefinite programs with quadratic objective functions are natively supported
 * __Infeasibility detection__: Infeasible problems are detected without a homogeneous self-dual embedding of the problem
 * __JuMP support__: COSMO supports MathOptInterface and JuMP `v0.19`, which allows you to describe your problem in JuMP
