@@ -76,10 +76,10 @@ function optimize!(ws::COSMO.Workspace)
 	settings.verbose && print_header(ws)
 	time_limit_start = time()
 
-	#preallocate arrays
 	m, n = ws.p.model_size
 	δx = zeros(n)
-	δy =  zeros(m)
+	δy = SplitVector(zeros(m), ws.p.C)
+
 	s_tl = zeros(m) # i.e. sTilde
 
 	ls = zeros(n + m)
@@ -105,11 +105,14 @@ function optimize!(ws::COSMO.Workspace)
 
 		# compute deltas for infeasibility detection
 		@. δx = ws.vars.x - δx
-		@. δy = -ws.vars.μ + δy
+
+		#@. δy = -ws.vars.μ + δy
+		@. δy -= ws.vars.μ
+
 
 		# compute residuals (based on optimality conditions of the problem) to check for termination condition
 		# compute them every {settings.check_termination} step
-		mod(iter, settings.check_termination)  == 0 && ((r_prim, r_dual) = calculate_residuals(ws))
+		mod(iter, settings.check_termination)  == 0 && ((r_prim, r_dual) = calculate_residuals!(ws))
 
 		# check convergence with residuals every {settings.checkIteration} steps
 		if mod(iter, settings.check_termination) == 0
@@ -132,13 +135,13 @@ function optimize!(ws::COSMO.Workspace)
 
 		# check infeasibility conditions every {settings.checkInfeasibility} steps
 		if mod(iter, settings.check_infeasibility) == 0
-			if is_primal_infeasible(δy, ws)
+			if is_primal_infeasible!(δy, ws)
 				status = :Primal_infeasible
 				cost = Inf
 				break
 			end
 
-			if is_dual_infeasible(δx, ws)
+			if is_dual_infeasible!(δx, ws)
 				status = :Dual_infeasible
 				cost = -Inf
 				break
@@ -162,7 +165,7 @@ function optimize!(ws::COSMO.Workspace)
 
 	# calculate primal and dual residuals
 	if num_iter == settings.max_iter
-		r_prim, r_dual = calculate_residuals(ws)
+		r_prim, r_dual = calculate_residuals!(ws)
 		status = :Max_iter_reached
 	end
 
@@ -189,9 +192,8 @@ function optimize!(ws::COSMO.Workspace)
 	y = -ws.vars.μ
 	free_memory!(ws)
 
-	return result = Result{Float64}(ws.vars.x, y, ws.vars.s.data, cost, num_iter, status, res_info, ws.times);
+	return Result{Float64}(ws.vars.x, y, ws.vars.s.data, cost, num_iter, status, res_info, ws.times);
 
-	return Result{Float64}(ws.vars.x, -ws.vars.μ, ws.vars.s.data, cost, num_iter, status, res_info, ws.times);
 end
 
 
